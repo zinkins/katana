@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -12,6 +15,17 @@ from .models import SourceSymbol, SourceSymbolChild
 _BRIDGE_DIR = Path(__file__).resolve().parent
 _NODE_BRIDGE = _BRIDGE_DIR / "ast_bridge.mjs"
 _DART_BRIDGE = _BRIDGE_DIR / "dart_ast.dart"
+_PARSER_SOURCE: ContextVar[Path | None] = ContextVar("parser_source", default=None)
+
+
+@contextmanager
+def parser_project_context(source: Path) -> Iterator[None]:
+    """Resolve optional parsers from the original project while inspecting a copy."""
+    token = _PARSER_SOURCE.set(source.resolve())
+    try:
+        yield
+    finally:
+        _PARSER_SOURCE.reset(token)
 
 
 def outline_typescript_with_ast(path: Path) -> list[SourceSymbol] | None:
@@ -101,7 +115,11 @@ def _run_node_bridge(command: str, path: Path) -> dict[str, Any] | None:
             ["node", str(_NODE_BRIDGE), command, str(path.resolve())],
             check=False,
             capture_output=True,
-            cwd=_project_root_for(path),
+            cwd=(
+                original.parent
+                if (original := _PARSER_SOURCE.get()) is not None
+                else _project_root_for(path)
+            ),
             text=True,
             timeout=8,
         )
@@ -164,6 +182,7 @@ def _children_from_payload(raw_children: Any) -> tuple[SourceSymbolChild, ...]:
 
 
 def _project_root_for(path: Path) -> Path:
+    path = _PARSER_SOURCE.get() or path
     start = path if path.is_dir() else path.parent
     for current in (start, *start.parents):
         if (

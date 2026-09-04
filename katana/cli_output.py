@@ -13,6 +13,7 @@ from katana import (
     outline_source_file,
     source_code_line_count,
 )
+from katana.external import parser_project_context
 from katana.toolchain import skipped_toolchain_payload
 
 
@@ -25,7 +26,10 @@ def _check_apply_source_split(
     package_relative: bool,
     max_lines: int | None,
 ) -> dict[str, object]:
-    with tempfile.TemporaryDirectory(prefix="katana-apply-check-") as tmp:
+    with (
+        parser_project_context(source),
+        tempfile.TemporaryDirectory(prefix="katana-apply-check-") as tmp,
+    ):
         sandbox_dir = Path(tmp) / "source"
         sandbox_dir.mkdir(parents=True)
         sandbox_source = sandbox_dir / source.name

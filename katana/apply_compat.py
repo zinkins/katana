@@ -104,13 +104,7 @@ def _apply_text_compat_exports(
     if source.suffix not in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
         return lines
     moved = {name for move in moves for name in move.symbols}
-    staying_refs = {
-        reference
-        for symbol in symbols
-        if symbol.name not in moved
-        for reference in symbol.references
-        if reference in moved
-    }
+    staying_refs = _text_staying_references(source, lines, moved, symbols)
     imports: list[str] = []
     exports: list[str] = []
     by_name = {symbol.name: symbol for symbol in symbols}
@@ -134,13 +128,7 @@ def _apply_text_usage_imports(
     if source.suffix not in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".dart"):
         return lines
     moved = {name for move in moves for name in move.symbols}
-    staying_refs = {
-        reference
-        for symbol in symbols
-        if symbol.name not in moved
-        for reference in symbol.references
-        if reference in moved
-    }
+    staying_refs = _text_staying_references(source, lines, moved, symbols)
     imports: list[str] = []
     by_name = {symbol.name: symbol for symbol in symbols}
     for move in moves:
@@ -160,6 +148,26 @@ def _apply_text_usage_imports(
     if not imports:
         return lines
     return _insert_after_text_leading_block(source, lines, imports)
+
+
+def _text_staying_references(
+    source: Path, lines: list[str], moved: set[str], symbols: list[SourceSymbol]
+) -> set[str]:
+    references = {
+        reference
+        for symbol in symbols
+        if symbol.name not in moved
+        for reference in symbol.references
+        if reference in moved
+    }
+    if source.suffix in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
+        # Outlines omit executable top-level statements, including test callbacks.
+        # Scan retained code as well, excluding imports, comments and literal text.
+        scanner = BraceScanner()
+        for line in lines[len(_text_leading_block(source, lines)) :]:
+            scanner.feed(line.rstrip("\r\n"))
+        references.update(scanner.identifiers & moved)
+    return references
 
 
 def _ts_exported_block(block: list[str]) -> list[str]:

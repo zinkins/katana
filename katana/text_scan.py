@@ -30,6 +30,7 @@ class BraceScanner:
 
     def __init__(self) -> None:
         self.depth = 0
+        self.identifiers: set[str] = set()
         # Innermost last: "code" counts braces, "template" does not.
         self._contexts: list[str] = ["code"]
         self._depths: list[int] = [0]
@@ -94,6 +95,7 @@ class BraceScanner:
             while end < len(line) and (line[end].isalnum() or line[end] in "_$"):
                 end += 1
             self._previous = line[index:end]
+            self.identifiers.add(self._previous)
             return end
         if char == "/" and (
             self._previous == ""

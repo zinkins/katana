@@ -91,10 +91,12 @@ def outline_typescript_module(path: Path) -> list[SourceSymbol]:
 
 
 def outline_css_file(path: Path) -> list[SourceSymbol]:
+    from .adapters.css.comments import attach_leading_comments
+
+    lines = read_source_text(path).splitlines()
     ast_symbols = outline_css_with_ast(path)
     if ast_symbols is not None:
-        return ast_symbols
-    lines = read_source_text(path).splitlines()
+        return attach_leading_comments(ast_symbols, lines)
     starts: list[tuple[int, str, str, str]] = []
     depth = 0
     for index, line in enumerate(lines, start=1):
@@ -108,7 +110,7 @@ def outline_css_file(path: Path) -> list[SourceSymbol]:
                 )
         depth += line.count("{") - line.count("}")
         depth = max(depth, 0)
-    return _symbols_from_braced_starts(lines, starts)
+    return attach_leading_comments(_symbols_from_braced_starts(lines, starts), lines)
 
 
 def outline_markdown_file(path: Path) -> list[SourceSymbol]:

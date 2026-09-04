@@ -8,6 +8,7 @@ from .apply_compat import (
     _apply_text_compat_exports,
     _apply_text_usage_imports,
     _text_leading_block,
+    _text_staying_references,
     _ts_exported_block,
     _typescript_target_block,
 )
@@ -361,13 +362,8 @@ def apply_text_split(
     symbols_by_name = {symbol.name: symbol for symbol in symbols}
     moved_to = {symbol: move.target for move in moves for symbol in move.symbols}
     moved_all = set(moved_to)
-    staying_refs = {
-        reference
-        for symbol in symbols
-        if symbol.name not in moved_all
-        for reference in symbol.references
-        if reference in moved_all
-    }
+    kept = _remove_ranges(lines, [spans[name] for name in plan.moved_symbols])
+    staying_refs = _text_staying_references(source, kept, moved_all, symbols)
 
     outputs: dict[Path, str] = {}
     for move in moves:
@@ -415,7 +411,6 @@ def apply_text_split(
                 _collapse_blank_lines("".join(content)), source.suffix
             )
 
-    kept = _remove_ranges(lines, [spans[name] for name in plan.moved_symbols])
     if keep_compat_imports:
         kept = _apply_text_compat_exports(source, kept, moves, symbols)
     else:
@@ -441,8 +436,9 @@ def fix_lint_after_split(
     moves: tuple[SourceSplitMove, ...],
     *,
     typecheck: bool = False,
+    fix: bool = True,
 ) -> dict[str, object]:
-    return run_toolchain_after_split(source, moves, typecheck=typecheck)
+    return run_toolchain_after_split(source, moves, typecheck=typecheck, fix=fix)
 
 
 def check_split_result(

@@ -13,10 +13,12 @@ def run_toolchain_after_split(
     moves: tuple[SourceSplitMove, ...],
     *,
     typecheck: bool = False,
+    fix: bool = True,
 ) -> dict[str, object]:
+    """Run detected tools; fix=False limits execution to enabled checkers."""
     files = [source, *(move.target for move in moves)]
     context = _toolchain_context(source)
-    adapters, skipped = _resolve_adapters(context, files, typecheck=typecheck)
+    adapters, skipped = _resolve_adapters(context, files, typecheck=typecheck, fix=fix)
     diagnostics: list[Diagnostic] = []
     formatter_ids: list[str] = []
     linter_ids: list[str] = []
@@ -61,10 +63,13 @@ def _resolve_adapters(
     files: list[Path],
     *,
     typecheck: bool,
+    fix: bool,
 ) -> tuple[list[tuple[ToolchainAdapter, list[Path]]], list[SkippedTool]]:
     adapters: list[tuple[ToolchainAdapter, list[Path]]] = []
     skipped: list[SkippedTool] = []
     for adapter in toolchain_adapters():
+        if not fix and adapter.kind != "checker":
+            continue
         if not adapter.default_enabled and not typecheck:
             continue
         adapter_files = [path for path in files if path.suffix in adapter.extensions]

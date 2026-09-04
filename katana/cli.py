@@ -255,11 +255,12 @@ def handle_katana_command(
                 "import_impact": lambda: import_impact_report(source, moves),
                 "review_command": lambda: _review_command(source, moves),
             }
-            if not args.no_lint_fix:
+            if not args.no_lint_fix or args.typecheck:
                 enrichments["lint"] = lambda: fix_lint_after_split(
                     source,
                     moves,
                     typecheck=args.typecheck,
+                    fix=not args.no_lint_fix,
                 )
             else:
                 payload["lint"] = skipped_toolchain_payload("skipped by --no-lint-fix")

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -65,13 +67,8 @@ def test_katana_cli_apply_reports_lint_payload(
     capsys: pytest.CaptureFixture[str],
     tmp_path,
 ) -> None:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    ruff = bin_dir / "ruff"
-    ruff.write_text(
-        '#!/bin/sh\ncase "$*" in *"--output-format=json"*) printf \'[]\';; esac\nexit 0\n'
-    )
-    ruff.chmod(0o755)
+    # Given the real Ruff installed with Katana's development dependencies.
+    bin_dir = Path(sys.executable).parent
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
     (tmp_path / "pyproject.toml").write_text("[tool.ruff]\n")
     source = tmp_path / "mod.py"
@@ -81,8 +78,10 @@ def test_katana_cli_apply_reports_lint_payload(
     plan = tmp_path / "mod.katana.json"
     plan.write_text(json.dumps({"moves": [{"target": "mod_moved.py", "symbols": ["moved"]}]}))
 
+    # When apply runs its default lint and format pipeline.
     main(["apply", str(source), "--plan-file", str(plan), "--json"])
 
+    # Then lint results and consumed-plan cleanup are reported on every platform.
     payload = json.loads(capsys.readouterr().out)
     assert payload["lint"]["adapters"] == ["ruff"]
     assert payload["lint"]["diagnostics"] == []
