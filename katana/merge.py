@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
 
-from .apply_compat import _ts_named_lines
+from .apply_compat import _js_relative_module_name, _ts_named_lines
 from .imports import (
     _dependency_import_lines,
     _format_from_import,
@@ -278,8 +279,7 @@ def _outline_text_target(target: Path) -> list[SourceSymbol]:
 
 
 def _text_module_reference(source: Path, target: Path) -> str:
-    relative = source.with_suffix("").relative_to(target.parent)
-    path = "/".join(relative.parts)
+    path = os.path.relpath(source.with_suffix(""), target.parent).replace("\\", "/")
     if source.suffix == ".dart":
         return f"{path}{source.suffix}"
     return f"./{path}" if not path.startswith(".") else path
@@ -398,7 +398,7 @@ def _text_dependency_imports(
             module = _relative_uri(target, ref_target)
             lines.append(f"import '{module}' show {', '.join(unique)};\n")
         elif source.suffix in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
-            module = _js_relative_module_name(target, ref_target)
+            module = _js_relative_module_name(target, ref_target, style_source=source)
             lines.extend(_ts_named_lines("import", module, unique, symbols))
     if lines:
         lines.append("\n")
@@ -431,12 +431,6 @@ def _insert_text_imports(lines: list[str], imports: list[str], suffix: str) -> l
         break
     suffix_lines = ["\n"] if end < len(lines) and lines[end].strip() else []
     return [*lines[:end], *imports, *suffix_lines, *lines[end:]]
-
-
-def _js_relative_module_name(source: Path, target: Path) -> str:
-    relative = target.with_suffix("").relative_to(source.parent)
-    path = "/".join(relative.parts)
-    return f"./{path}" if not path.startswith(".") else path
 
 
 def _relative_uri(source: Path, target: Path) -> str:

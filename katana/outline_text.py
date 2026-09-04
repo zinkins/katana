@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from .models import SourceSymbol, SourceSymbolChild
+from .text_scan import BraceScanner
 
 
 def _with_typescript_metadata(
@@ -163,15 +164,18 @@ def _text_children(
 ) -> tuple[SourceSymbolChild, ...]:
     starts: list[tuple[int, str, str, str, tuple[str, ...]]] = []
     depth = 0
+    scanner = BraceScanner()
     for index in range(start_line, end_line + 1):
         line = lines[index - 1]
         stripped = line.strip()
-        if index > start_line and depth == 1:
+        if index > start_line and depth == 1 and scanner.in_code:
             child = _text_child_start(stripped, language=language)
             if child is not None:
                 starts.append((index, *child))
-        depth += _brace_delta(line)
-        depth = max(depth, 0)
+        if language == "typescript":
+            depth = scanner.feed(line)
+        else:
+            depth = max(depth + _brace_delta(line), 0)
     children: list[SourceSymbolChild] = []
     for position, (child_start, name, kind, signature, tags) in enumerate(starts):
         child_end = starts[position + 1][0] - 1 if position + 1 < len(starts) else end_line
@@ -225,31 +229,24 @@ def _text_code_lines(lines: list[str]) -> int:
 
 
 def _brace_delta(line: str) -> int:
-    in_single = False
-    in_double = False
-    in_template = False
-    escaped = False
-    delta = 0
-    for char in line:
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\":
-            escaped = True
-            continue
-        if char == "'" and not in_double and not in_template:
-            in_single = not in_single
-            continue
-        if char == '"' and not in_single and not in_template:
-            in_double = not in_double
-            continue
-        if char == "`" and not in_single and not in_double:
-            in_template = not in_template
-            continue
-        if in_single or in_double or in_template:
-            continue
-        if char == "{":
-            delta += 1
-        elif char == "}":
-            delta -= 1
-    return delta
+    """Brace delta of one line read on its own.
+
+    Kept for callers that genuinely hold a single line. Anything walking a whole
+    file must use `BraceScanner`: only it carries multiline strings, template
+    literals and block comments across line boundaries.
+    """
+    return BraceScanner().feed(line)
+
+
+def _typescript_doc_start(lines: list[str], start: int) -> int:
+    """Attach an adjacent JSDoc block, leaving separated file headers in place."""
+    end = start - 2
+    if end < 0 or not lines[end].rstrip().endswith("*/"):
+        return start
+    for index in range(end, -1, -1):
+        stripped = lines[index].strip()
+        if stripped.startswith("/**"):
+            return index + 1
+        if "/*" in stripped or (index < end and "*/" in stripped):
+            break
+    return start

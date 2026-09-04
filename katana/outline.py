@@ -14,11 +14,13 @@ from .models import _TS_SYMBOL_RE, SourceSymbol, SourceSymbolChild
 from .outline_text import (
     _brace_delta,
     _text_code_lines,
+    _typescript_doc_start,
     _typescript_file_meta,
     _with_dart_metadata,
     _with_typescript_metadata,
 )
 from .source_io import read_source_text
+from .text_scan import BraceScanner
 
 _DART_CLASS_RE = re.compile(
     r"^(?:(?:abstract|base|final|interface|sealed)\s+)*"
@@ -71,19 +73,18 @@ def outline_typescript_module(path: Path) -> list[SourceSymbol]:
     lines = read_source_text(path).splitlines()
     starts: list[tuple[int, str, str, str]] = []
     file_meta = _typescript_file_meta(path, lines)
-    depth = 0
+    scanner = BraceScanner()
     for index, line in enumerate(lines, start=1):
         stripped = line.strip()
-        if depth == 0:
+        if scanner.depth == 0 and scanner.in_code:
             match = _TS_SYMBOL_RE.match(stripped)
             if match is not None:
                 kind = match.group("kind") or "const"
                 name = match.group("name")
                 starts.append((index, name, kind, stripped))
-        depth += _brace_delta(line)
-        depth = max(depth, 0)
+        scanner.feed(line)
     return _with_typescript_metadata(
-        _symbols_from_text_starts(lines, starts),
+        _symbols_from_text_starts(lines, starts, attach_docs=True),
         lines,
         file_meta=file_meta,
     )
@@ -317,11 +318,20 @@ def _symbols_from_text_starts(
     starts: list[tuple[int, str, str, str]],
     *,
     include_references: bool = True,
+    attach_docs: bool = False,
 ) -> list[SourceSymbol]:
+    if attach_docs:
+        starts = [
+            (_typescript_doc_start(lines, start), name, kind, signature)
+            for start, name, kind, signature in starts
+        ]
     names = _unique_names([name for _, name, _, _ in starts])
     raw_symbols: list[SourceSymbol] = []
     for index, (start, _raw_name, kind, signature) in enumerate(starts):
         end = starts[index + 1][0] - 1 if index + 1 < len(starts) else len(lines)
+        if attach_docs:
+            while end > start and not lines[end - 1].strip():
+                end -= 1
         name = names[index]
         raw_symbols.append(
             SourceSymbol(

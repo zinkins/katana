@@ -9,6 +9,7 @@ from .apply_compat import (
     _apply_text_usage_imports,
     _text_leading_block,
     _ts_exported_block,
+    _typescript_target_block,
 )
 from .apply_helpers import (
     _collapse_blank_lines,
@@ -377,7 +378,12 @@ def apply_text_split(
             symbols_by_name,
             moved_to,
         )
-        content: list[str] = [*leading_block]
+        target_leading = (
+            _typescript_target_block(source, move.target, leading_block)
+            if typescript
+            else leading_block
+        )
+        content: list[str] = [*target_leading]
         if dependency_imports:
             content.extend(dependency_imports)
         if content and content[-1].strip():
@@ -398,7 +404,7 @@ def apply_text_split(
                 source,
                 move,
                 blocks=blocks,
-                leading_block=leading_block,
+                leading_block=target_leading,
                 symbols=symbols_by_name,
                 moved_to=moved_to,
                 keep_compat_imports=keep_compat_imports,

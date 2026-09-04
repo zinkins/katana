@@ -155,12 +155,15 @@ def _print_source_split_payload(payload: dict[str, object]) -> None:
         for raw in symbols:
             if not isinstance(raw, dict):
                 continue
-            refs = raw.get("references") or []
+            refs = [
+                ref["name"] if isinstance(ref, dict) else ref for ref in raw.get("references") or []
+            ]
+            span = raw.get("span", raw)
             refs_text = f" refs={','.join(refs)}" if refs else ""
             tags = raw.get("tags") or []
             tags_text = f" tags={','.join(tags)}" if tags else ""
             print(
-                f"{raw['start_line']:>5}-{raw['end_line']:<5} "
+                f"{span['start_line']:>5}-{span['end_line']:<5} "
                 f"{raw['code_lines']:>4} {raw['kind']:<16} "
                 f"{raw['signature']}{tags_text}{refs_text}"
             )

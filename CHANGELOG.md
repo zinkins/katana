@@ -5,6 +5,17 @@ then, compatibility promises are scoped explicitly below.
 
 ## Unreleased
 
+### Fixed
+
+- Human-readable `map` output now reads nested spans and reference names while
+  preserving the legacy `outline` and JSON payload formats.
+- Structural JavaScript/TypeScript outlines retain scanner state across
+  multiline templates, interpolations, comments, and continued strings.
+- Adjacent JSDoc comments travel with their declarations instead of being
+  included in the preceding symbol; separate file headers stay in the source.
+- Text splits preserve explicit relative-import extensions and rebase copied
+  imports and generated dependencies for targets in subdirectories.
+
 ## 0.2.0 - 2026-08-07
 
 ### Added

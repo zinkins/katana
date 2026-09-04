@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 
 from .models import SourceSplitMove, SourceSymbol
+from .outline_text import _typescript_doc_start
+from .source_io import read_source_text
+from .text_scan import BraceScanner
 
 _TS_TYPE_KINDS = {"InterfaceDeclaration", "TypeAliasDeclaration", "interface", "type"}
 
@@ -45,6 +50,7 @@ def _typescript_leading_block(lines: list[str]) -> list[str]:
             if end == index:
                 end = index + 1
             continue
+        end = min(end, _typescript_doc_start(lines, index + 1) - 1)
         break
     return lines[:end]
 
@@ -159,16 +165,18 @@ def _apply_text_usage_imports(
 def _ts_exported_block(block: list[str]) -> list[str]:
     if not block:
         return block
-    first = block[0]
-    stripped = first.lstrip()
-    if stripped.startswith("export "):
-        return block
     from .models import _TS_SYMBOL_RE
 
-    if _TS_SYMBOL_RE.match(stripped) is None:
-        return block
-    indent = first[: len(first) - len(stripped)]
-    return [f"{indent}export {stripped}", *block[1:]]
+    scanner = BraceScanner()
+    for index, line in enumerate(block):
+        stripped = line.lstrip()
+        if scanner.in_code and _TS_SYMBOL_RE.match(stripped):
+            if stripped.startswith("export "):
+                return block
+            indent = line[: len(line) - len(stripped)]
+            return [*block[:index], f"{indent}export {stripped}", *block[index + 1 :]]
+        scanner.feed(line)
+    return block
 
 
 def _ts_named_lines(
@@ -242,13 +250,46 @@ def _insert_after_text_leading_block(
     return [*lines[:end], *insert, *suffix, *lines[end:]]
 
 
-def _js_relative_module_name(source: Path, target: Path) -> str:
-    try:
-        relative = target.with_suffix("").relative_to(source.parent)
-    except ValueError as error:
-        raise ValueError("Split targets must be inside the source module directory") from error
-    path = "/".join(relative.parts)
-    return f"./{path}" if not path.startswith(".") else path
+def _js_relative_module_name(
+    source: Path, target: Path, *, style_source: Path | None = None
+) -> str:
+    original = style_source or source
+    text = read_source_text(original)
+    extensions = re.findall(r"""(?:from|import)\s*["']\.{1,2}/[^"'\n]+(\.[cm]?[jt]sx?)["']""", text)
+    suffix = extensions[0] if extensions else ""
+    relative = os.path.relpath(target.with_suffix(suffix), source.parent).replace("\\", "/")
+    return f"./{relative}" if not relative.startswith(".") else relative
+
+
+def _typescript_target_block(source: Path, target: Path, block: list[str]) -> list[str]:
+    """Copy directives and imports, rebased to the destination, without file docs."""
+    kept: list[str] = []
+    scanner = BraceScanner()
+    copying = False
+    for line in block:
+        stripped = line.strip()
+        if scanner.in_code and (
+            stripped.startswith("import ")
+            or stripped.rstrip(";") in {'"use client"', "'use client'"}
+        ):
+            copying = True
+        if copying:
+            kept.append(line)
+        scanner.feed(line)
+        if scanner.in_code and scanner.depth == 0:
+            copying = False
+
+    def rebase(match: re.Match[str]) -> str:
+        module = source.parent / match["module"]
+        relative = os.path.relpath(module, target.parent).replace("\\", "/")
+        if not relative.startswith("."):
+            relative = "./" + relative
+        return match["prefix"] + match["quote"] + relative + match["quote"]
+
+    pattern = (
+        r"""(?P<prefix>\bfrom\s*|\bimport\s*)(?P<quote>["'])(?P<module>\.{1,2}/[^"']+)(?P=quote)"""
+    )
+    return re.sub(pattern, rebase, "".join(kept)).splitlines(keepends=True)
 
 
 def _relative_uri(source: Path, target: Path) -> str:
