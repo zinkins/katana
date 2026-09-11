@@ -12,6 +12,7 @@ from .external import (
 from .ir import DocumentIR
 from .models import _TS_SYMBOL_RE, SourceSymbol, SourceSymbolChild
 from .outline_text import (
+    _attach_typescript_comments,
     _brace_delta,
     _text_code_lines,
     _typescript_doc_start,
@@ -67,10 +68,10 @@ def analyze_source_file(path: Path) -> DocumentIR:
 
 
 def outline_typescript_module(path: Path) -> list[SourceSymbol]:
+    lines = read_source_text(path).splitlines()
     ast_symbols = outline_typescript_with_ast(path)
     if ast_symbols is not None:
-        return ast_symbols
-    lines = read_source_text(path).splitlines()
+        return _attach_typescript_comments(ast_symbols, lines)
     starts: list[tuple[int, str, str, str]] = []
     file_meta = _typescript_file_meta(path, lines)
     scanner = BraceScanner()

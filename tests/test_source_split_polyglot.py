@@ -270,7 +270,8 @@ def test_source_split_typescript_prefers_local_helpers_and_pins_default_export(t
     source_text = source.read_text()
     assert "export function formatLabel" in part_text
     assert 'import { formatLabel } from "./widget_part1"' in source_text
-    assert 'export { formatLabel, trim } from "./widget_part1"' in source_text
+    # Both helpers were private, so compatibility re-exports nothing new.
+    assert "export { formatLabel" not in source_text
     assert "export default function Page" in source_text
 
 

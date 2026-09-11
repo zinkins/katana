@@ -4,7 +4,7 @@ import ast
 import os
 from pathlib import Path
 
-from .apply_compat import _js_relative_module_name, _ts_named_lines
+from .apply_compat import _js_relative_module_name, _ts_named_lines, _ts_terminator
 from .imports import (
     _dependency_import_lines,
     _format_from_import,
@@ -392,6 +392,8 @@ def _text_dependency_imports(
                 continue
             refs_by_target.setdefault(ref_target, []).append(reference)
     lines: list[str] = []
+    # The source is still unwritten here, so its own statement style is readable.
+    terminator = _ts_terminator(read_source_text(source).splitlines()) if refs_by_target else ""
     for ref_target, names in sorted(refs_by_target.items(), key=lambda item: str(item[0])):
         unique = sorted(dict.fromkeys(names))
         if source.suffix == ".dart":
@@ -399,7 +401,7 @@ def _text_dependency_imports(
             lines.append(f"import '{module}' show {', '.join(unique)};\n")
         elif source.suffix in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
             module = _js_relative_module_name(target, ref_target, style_source=source)
-            lines.extend(_ts_named_lines("import", module, unique, symbols))
+            lines.extend(_ts_named_lines("import", module, unique, symbols, terminator))
     if lines:
         lines.append("\n")
     return lines

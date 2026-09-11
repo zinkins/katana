@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 from .models import SourceSymbol, SourceSymbolChild
@@ -239,14 +240,34 @@ def _brace_delta(line: str) -> int:
 
 
 def _typescript_doc_start(lines: list[str], start: int) -> int:
-    """Attach an adjacent JSDoc block, leaving separated file headers in place."""
-    end = start - 2
-    if end < 0 or not lines[end].rstrip().endswith("*/"):
-        return start
-    for index in range(end, -1, -1):
-        stripped = lines[index].strip()
-        if stripped.startswith("/**"):
-            return index + 1
-        if "/*" in stripped or (index < end and "*/" in stripped):
+    """Attach the comments directly above a symbol, leaving separated file headers in place.
+
+    A run of `//` lines and standalone `/* ... */` blocks belongs to the symbol
+    below it; a blank line or code ends the run.
+    """
+    first = start
+    while first > 1:
+        above = lines[first - 2].strip()
+        if above.startswith("//"):
+            first -= 1
+            continue
+        if not above.endswith("*/"):
             break
-    return start
+        opening = next((line for line in range(first - 1, 0, -1) if "/*" in lines[line - 1]), None)
+        if opening is None or not lines[opening - 1].strip().startswith("/*"):
+            break
+        first = opening
+    return first
+
+
+def _attach_typescript_comments(
+    symbols: list[SourceSymbol], lines: list[str]
+) -> list[SourceSymbol]:
+    """Extend compiler spans, which start after leading trivia, over their own comments."""
+    result: list[SourceSymbol] = []
+    previous_end = 0
+    for symbol in symbols:
+        start = max(_typescript_doc_start(lines, symbol.start_line), previous_end + 1)
+        result.append(replace(symbol, start_line=start))
+        previous_end = symbol.end_line
+    return result

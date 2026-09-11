@@ -105,6 +105,7 @@ def _apply_text_compat_exports(
         return lines
     moved = {name for move in moves for name in move.symbols}
     staying_refs = _text_staying_references(source, lines, moved, symbols)
+    terminator = _ts_terminator(lines)
     imports: list[str] = []
     exports: list[str] = []
     by_name = {symbol.name: symbol for symbol in symbols}
@@ -113,8 +114,11 @@ def _apply_text_compat_exports(
         # Re-exports do not bind names locally; staying code needs an import.
         needed = [name for name in move.symbols if name in staying_refs]
         if needed:
-            imports.extend(_ts_named_lines("import", module, needed, by_name))
-        exports.extend(_ts_named_lines("export", module, list(move.symbols), by_name))
+            imports.extend(_ts_named_lines("import", module, needed, by_name, terminator))
+        # Compatibility keeps the old public surface; private helpers stay private.
+        public = [name for name in move.symbols if _ts_was_exported(by_name.get(name))]
+        if public:
+            exports.extend(_ts_named_lines("export", module, public, by_name, terminator))
     lines = _insert_after_text_leading_block(source, lines, imports)
     return _append_compat_imports(lines, exports)
 
@@ -142,7 +146,11 @@ def _apply_text_usage_imports(
         else:
             imports.extend(
                 _ts_named_lines(
-                    "import", _js_relative_module_name(source, move.target), needed, by_name
+                    "import",
+                    _js_relative_module_name(source, move.target),
+                    needed,
+                    by_name,
+                    _ts_terminator(lines),
                 )
             )
     if not imports:
@@ -192,14 +200,39 @@ def _ts_named_lines(
     module: str,
     names: list[str],
     symbols: dict[str, SourceSymbol],
+    terminator: str = "",
 ) -> list[str]:
     values, types = _ts_split_type_names(names, symbols)
     lines: list[str] = []
     if values:
-        lines.append(f'{verb} {{ {", ".join(values)} }} from "{module}"\n')
+        lines.append(f'{verb} {{ {", ".join(values)} }} from "{module}"{terminator}\n')
     if types:
-        lines.append(f'{verb} type {{ {", ".join(types)} }} from "{module}"\n')
+        lines.append(f'{verb} type {{ {", ".join(types)} }} from "{module}"{terminator}\n')
     return lines
+
+
+_TS_MODULE_STATEMENT_END_RE = re.compile(r"""^\s*import\s+["']|\bfrom\s+["']""")
+
+
+def _ts_terminator(lines: list[str]) -> str:
+    """Return ";" when the file's module statements (or, lacking any, its code) use one."""
+    ends = [
+        line.rstrip().endswith(";")
+        for line in _typescript_leading_block(lines)
+        if _TS_MODULE_STATEMENT_END_RE.search(line)
+    ]
+    if not ends:
+        ends = [line.rstrip().endswith(";") for line in lines]
+    return ";" if any(ends) else ""
+
+
+def _ts_was_exported(symbol: SourceSymbol | None) -> bool:
+    if symbol is None:
+        return True
+    meta = symbol.meta or {}
+    if "exported" in meta:
+        return bool(meta["exported"]) or bool(meta.get("default_export"))
+    return symbol.signature.lstrip().startswith("export ")
 
 
 def _ts_split_type_names(

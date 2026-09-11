@@ -83,5 +83,6 @@ def _prune_text_imports(text: str, suffix: str) -> str:
             pieces.append("{ " + ", ".join(kept_named) + " }")
         if kept_namespace:
             pieces.append(f"* as {kept_namespace}")
-        out.append(f"import {type_kw}{', '.join(pieces)} from {match.group('module')}\n")
+        end = ";" if stripped.endswith(";") else ""
+        out.append(f"import {type_kw}{', '.join(pieces)} from {match.group('module')}{end}\n")
     return "".join(out) + rest
