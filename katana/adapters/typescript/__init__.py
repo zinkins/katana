@@ -135,7 +135,9 @@ class TypeScriptAdapter(BundledLanguageAdapter):
                     pinned_reason=(None if safe else "unmodeled top-level executable statements"),
                 )
                 continue
-            reason = "default export" if meta.get("default_export") else meta.get("move_pinned_reason")
+            reason = (
+                "default export" if meta.get("default_export") else meta.get("move_pinned_reason")
+            )
             constraints[symbol.name] = MoveConstraints(
                 movability="pinned" if reason else "closure",
                 required_with=tuple(meta.get("assigned_by", ())),
@@ -188,7 +190,7 @@ def _eager_initializer_warnings(
     moved = {name for move in moves for name in move.symbols}
     return [
         f"{symbol.name} initializer will run before the top-level statement at line "
-        f"{symbol.meta['eager_after_line']}; verify initialization order"
+        f"{(symbol.meta or {})['eager_after_line']}; verify initialization order"
         for symbol in symbols
         if symbol.name in moved and (symbol.meta or {}).get("eager_after_line")
     ]

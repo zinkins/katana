@@ -79,7 +79,11 @@ def _pinned_text_symbol(source: Path, symbol: SourceSymbol) -> bool:
     if source.suffix == ".dart":
         return symbol.name == "main"
     meta = symbol.meta or {}
-    if meta.get("default_export") or meta.get("move_pinned_reason") or symbol.name == "default_export":
+    if (
+        meta.get("default_export")
+        or meta.get("move_pinned_reason")
+        or symbol.name == "default_export"
+    ):
         return True
     return "export default" in symbol.signature
 

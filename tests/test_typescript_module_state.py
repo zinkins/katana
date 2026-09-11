@@ -42,7 +42,9 @@ def test_module_state_pins_reassigned_and_late_initialized_bindings(tmp_path: Pa
 
     # When Katana maps the module and lists safe move groups.
     symbols = outline_source_file(source)
-    constraints = {symbol.name: symbol.constraints for symbol in analyze_source_file(source).symbols}
+    constraints = {
+        symbol.name: symbol.constraints for symbol in analyze_source_file(source).symbols
+    }
     groups = source_safe_move_groups(source, symbols)["groups"]
     references = {symbol.name: symbol.references for symbol in symbols}
 
