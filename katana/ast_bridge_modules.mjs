@@ -1,15 +1,16 @@
 import fs from "node:fs"
 import { createRequire } from "node:module"
 import path from "node:path"
-import { pathToFileURL } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const requireFromHere = createRequire(import.meta.url)
+const bridgeDir = path.dirname(fileURLToPath(import.meta.url))
 
 export function resolveOptional(name, sourceFile) {
   const candidates = [
     process.cwd(),
     path.dirname(path.resolve(sourceFile || ".")),
-    path.dirname(new URL(import.meta.url).pathname),
+    bridgeDir,
   ]
   try {
     return requireFromHere.resolve(name, { paths: candidates })
@@ -40,7 +41,7 @@ export function resolveImportOptional(name, sourceFile) {
   const starts = [
     process.cwd(),
     path.dirname(path.resolve(sourceFile || ".")),
-    path.dirname(new URL(import.meta.url).pathname),
+    bridgeDir,
   ]
   const searched = new Set()
   for (const start of starts) {

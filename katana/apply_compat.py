@@ -91,6 +91,31 @@ def _append_compat_imports(lines: list[str], insert: list[str]) -> list[str]:
     return [*lines, *prefix, *insert]
 
 
+def _ts_test_registration_imports(
+    source: Path,
+    moves: tuple[SourceSplitMove, ...],
+    symbols: list[SourceSymbol],
+    terminator: str,
+) -> list[str]:
+    by_name = {symbol.name: symbol for symbol in symbols}
+    registration_moves = [
+        move
+        for move in moves
+        if any("test_registration" in by_name[name].tags for name in move.symbols)
+    ]
+    registration_moves.sort(
+        key=lambda move: min(
+            by_name[name].start_line
+            for name in move.symbols
+            if "test_registration" in by_name[name].tags
+        )
+    )
+    return [
+        f'import "{_js_relative_module_name(source, move.target)}"{terminator}\n'
+        for move in registration_moves
+    ]
+
+
 def _apply_text_compat_exports(
     source: Path,
     lines: list[str],
@@ -106,7 +131,7 @@ def _apply_text_compat_exports(
     moved = {name for move in moves for name in move.symbols}
     staying_refs = _text_staying_references(source, lines, moved, symbols)
     terminator = _ts_terminator(lines)
-    imports: list[str] = []
+    imports = _ts_test_registration_imports(source, moves, symbols, terminator)
     exports: list[str] = []
     by_name = {symbol.name: symbol for symbol in symbols}
     for move in moves:
@@ -135,6 +160,8 @@ def _apply_text_usage_imports(
     staying_refs = _text_staying_references(source, lines, moved, symbols)
     imports: list[str] = []
     by_name = {symbol.name: symbol for symbol in symbols}
+    if source.suffix in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
+        imports.extend(_ts_test_registration_imports(source, moves, symbols, _ts_terminator(lines)))
     for move in moves:
         needed = sorted(set(move.symbols) & staying_refs)
         if not needed:
@@ -297,7 +324,7 @@ def _js_relative_module_name(
     original = style_source or source
     text = read_source_text(original)
     extensions = re.findall(r"""(?:from|import)\s*["']\.{1,2}/[^"'\n]+(\.[cm]?[jt]sx?)["']""", text)
-    suffix = extensions[0] if extensions else ""
+    suffix = extensions[0] if extensions else (source.suffix if source.suffix == ".mjs" else "")
     relative = os.path.relpath(target.with_suffix(suffix), source.parent).replace("\\", "/")
     return f"./{relative}" if not relative.startswith(".") else relative
 

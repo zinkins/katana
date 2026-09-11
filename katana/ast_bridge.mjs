@@ -1,12 +1,9 @@
 #!/usr/bin/env node
 import fs from "node:fs"
 import path from "node:path"
-import {
-  loadOptional,
-  resolveImportOptional,
-  resolveOptional,
-} from "./ast_bridge_modules.mjs"
+import { loadOptional, resolveImportOptional, resolveOptional } from "./ast_bridge_modules.mjs"
 import { parseMarkdownDocument } from "./ast_bridge_markdown.mjs"
+import { nodeTestRegistrationEntries } from "./ast_bridge_test_registrations.mjs"
 
 function lineOf(sourceFile, position) {
   return sourceFile.getLineAndCharacterOfPosition(position).line + 1
@@ -112,6 +109,9 @@ function defaultExported(ts, node) {
 
 function declarationEntries(ts, sourceFile) {
   const entries = []
+  const registrations = new Map(
+    nodeTestRegistrationEntries(ts, sourceFile).map((entry) => [entry.node, entry]),
+  )
   for (const statement of sourceFile.statements) {
     if (
       ts.isFunctionDeclaration(statement) ||
@@ -141,6 +141,11 @@ function declarationEntries(ts, sourceFile) {
           })
         }
       }
+      continue
+    }
+    const registration = registrations.get(statement)
+    if (registration) {
+      entries.push(registration)
     }
   }
   return entries
@@ -305,11 +310,12 @@ function enrichTsSymbol(ts, sourceFile, fileMetaPayload, entry, names) {
   const node = entry.node
   const text = node.getText(sourceFile)
   const bodyNode = entry.bodyNode || node
-  const tags = []
+  const tags = [...(entry.tags || [])]
   const meta = {
     exported: exported(ts, node),
     default_export: defaultExported(ts, node),
     type_only: ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node),
+    ...(entry.meta || {}),
   }
   const isPascal = /^[A-Z][A-Za-z0-9]*$/.test(entry.name)
   if (isPascal && hasJsx(ts, bodyNode)) {
@@ -347,7 +353,7 @@ function enrichTsSymbol(ts, sourceFile, fileMetaPayload, entry, names) {
   return {
     name: entry.name,
     kind: entry.kind,
-    signature: firstLine(text),
+    signature: entry.signature || firstLine(text),
     start_line: lineOf(sourceFile, node.getStart(sourceFile)),
     end_line: lineOf(sourceFile, node.getEnd()),
     code_lines: textCodeLines(text),

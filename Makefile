@@ -22,6 +22,7 @@ node-check:
 	node --check katana/ast_bridge.mjs
 	node --check katana/ast_bridge_markdown.mjs
 	node --check katana/ast_bridge_modules.mjs
+	node --check katana/ast_bridge_test_registrations.mjs
 
 check: lint format-check typecheck test size-check node-check
 

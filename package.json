@@ -5,6 +5,9 @@
   "scripts": {
     "test:markdown-bridge": "node katana/ast_bridge.mjs markdown tests/fixtures/markdown.md"
   },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
   "optionalDependencies": {
     "@tanstack/markdown": "0.0.13"
   }

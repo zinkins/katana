@@ -38,6 +38,7 @@ katana = [
     "ast_bridge.mjs",
     "ast_bridge_markdown.mjs",
     "ast_bridge_modules.mjs",
+    "ast_bridge_test_registrations.mjs",
     "dart_ast.dart",
     "py.typed",
 ]

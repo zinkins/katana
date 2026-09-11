@@ -185,6 +185,12 @@ The complete automation contract is in
 | MDX | heading structure, optional AST enrichment | conservative; verify imports and links | Prettier |
 | Any other language | Python or JSON command adapter | analysis-only by default | external toolchain adapter |
 
+With the TypeScript Compiler API available, Katana also maps top-level
+`describe(...)` registrations imported from `node:test`. Their order and group
+constraints are explicit in DocumentIR. Apply moves the complete ordered group
+through side-effect modules and fails closed when other top-level execution or
+source-local dependencies could make that rewrite unsafe.
+
 Run the conformance check to see exactly what is available for a file:
 
 ```bash

@@ -5,8 +5,16 @@ then, compatibility promises are scoped explicitly below.
 
 ## Unreleased
 
+### Added
+
+- TypeScript Compiler API maps top-level `node:test` `describe(...)`
+  registrations as ordered, selectable symbols and can move safe complete
+  registration groups through side-effect modules.
+
 ### Fixed
 
+- Optional Node bridge modules resolve correctly from the Katana package on
+  Windows.
 - Human-readable `map` output now reads nested spans and reference names while
   preserving the legacy `outline` and JSON payload formats.
 - Structural JavaScript/TypeScript outlines retain scanner state across
