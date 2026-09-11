@@ -387,7 +387,7 @@ def apply_text_split(
         blocks: list[list[str]] = []
         for symbol in move.symbols:
             block = _slice_with_trailing_blank(lines, spans[symbol])
-            if typescript:
+            if typescript and "test_registration" not in symbols_by_name[symbol].tags:
                 # The source re-imports moved symbols, so they must be
                 # exported from the split file.
                 block = _ts_exported_block(block)

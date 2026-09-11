@@ -94,6 +94,42 @@ def test_node_test_registrations_move_as_ordered_side_effect_modules(tmp_path: P
     assert "suites 2" in result.stdout
 
 
+@pytest.mark.parametrize(
+    "nested_body",
+    [
+        '  function render() {\n    return 1;\n  }\n  it("runs", () => {});',
+        '  it("runs", () => {\n    const value = 1;\n    if (!value) throw new Error("bad");\n  });',
+    ],
+    ids=["function", "const"],
+)
+def test_node_test_registration_move_preserves_nested_declarations(
+    tmp_path: Path,
+    nested_body: str,
+) -> None:
+    # Given a Node test registration whose callback declares local state.
+    source = tmp_path / "panel.test.mjs"
+    target = tmp_path / "panel.suite.mjs"
+    source_text = (
+        'import { describe, it } from "node:test";\n\n'
+        'describe("suite", () => {\n'
+        f"{nested_body}\n"
+        "});\n"
+    )
+    source.write_text(source_text, encoding="utf-8")
+    registration = next(
+        symbol for symbol in outline_source_file(source) if "test_registration" in symbol.tags
+    )
+
+    # When the complete registration moves to a side-effect module.
+    apply_source_split(
+        source,
+        (SourceSplitMove(target, (registration.name,)),),
+    )
+
+    # Then Katana preserves every nested declaration byte for byte.
+    assert nested_body in target.read_text(encoding="utf-8")
+
+
 def test_node_test_registration_entry_does_not_start_with_blank_line(tmp_path: Path) -> None:
     # Given a test module whose imports are followed by a blank separator line.
     source = tmp_path / "panel.test.mjs"
