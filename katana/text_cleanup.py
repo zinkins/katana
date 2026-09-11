@@ -85,4 +85,8 @@ def _prune_text_imports(text: str, suffix: str) -> str:
             pieces.append(f"* as {kept_namespace}")
         end = ";" if stripped.endswith(";") else ""
         out.append(f"import {type_kw}{', '.join(pieces)} from {match.group('module')}{end}\n")
-    return "".join(out) + rest
+    pruned = "".join(out)
+    if block and block[0].strip():
+        # Dropped imports must not leave their blank separator at the top.
+        pruned = pruned.lstrip("\r\n")
+    return pruned + rest

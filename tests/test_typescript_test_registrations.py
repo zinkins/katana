@@ -94,6 +94,34 @@ def test_node_test_registrations_move_as_ordered_side_effect_modules(tmp_path: P
     assert "suites 2" in result.stdout
 
 
+def test_node_test_registration_entry_does_not_start_with_blank_line(tmp_path: Path) -> None:
+    # Given a test module whose imports are followed by a blank separator line.
+    source = tmp_path / "panel.test.mjs"
+    source.write_text(
+        'import { describe, it } from "node:test";\n\n'
+        'describe("first suite", () => {\n  it("runs", () => {});\n});\n\n'
+        'describe("second suite", () => {\n  it("runs", () => {});\n});\n',
+        encoding="utf-8",
+    )
+    registrations = [
+        symbol for symbol in outline_source_file(source) if "test_registration" in symbol.tags
+    ]
+
+    # When every registration moves and the original imports become unused.
+    apply_source_split(
+        source,
+        (
+            SourceSplitMove(tmp_path / "panel.first.mjs", (registrations[0].name,)),
+            SourceSplitMove(tmp_path / "panel.second.mjs", (registrations[1].name,)),
+        ),
+    )
+
+    # Then the entry holds only the ordered side-effect imports, without a leading blank line.
+    assert source.read_text(encoding="utf-8") == (
+        'import "./panel.first.mjs";\nimport "./panel.second.mjs";\n'
+    )
+
+
 def test_node_test_registration_accepts_named_callback(tmp_path: Path) -> None:
     # Given a top-level suite registered with an imported callback.
     source = tmp_path / "panel.test.mjs"
