@@ -54,6 +54,10 @@ def _text_move_closures(source: Path, symbols: list[SourceSymbol]) -> dict[str, 
                 continue
             closure.add(name)
             stack.extend(ref for ref in by_name[name].references if ref in by_name)
+            # An imported binding is read-only, so a reassigned symbol moves
+            # together with every symbol that writes it.
+            writers = (by_name[name].meta or {}).get("assigned_by", ())
+            stack.extend(writer for writer in writers if writer in by_name)
             # Dart private symbols are library-private: they can only move
             # together with every consumer, in the same target file.
             if dart and name.startswith("_"):
@@ -75,7 +79,7 @@ def _pinned_text_symbol(source: Path, symbol: SourceSymbol) -> bool:
     if source.suffix == ".dart":
         return symbol.name == "main"
     meta = symbol.meta or {}
-    if meta.get("default_export") or symbol.name == "default_export":
+    if meta.get("default_export") or meta.get("move_pinned_reason") or symbol.name == "default_export":
         return True
     return "export default" in symbol.signature
 

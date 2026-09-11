@@ -4,6 +4,7 @@ import path from "node:path"
 import { loadOptional, resolveImportOptional, resolveOptional } from "./ast_bridge_modules.mjs"
 import { parseMarkdownDocument } from "./ast_bridge_markdown.mjs"
 import { nodeTestRegistrationEntries } from "./ast_bridge_test_registrations.mjs"
+import { annotateModuleState, isPropertyName } from "./ast_bridge_bindings.mjs"
 
 function lineOf(sourceFile, position) {
   return sourceFile.getLineAndCharacterOfPosition(position).line + 1
@@ -154,7 +155,7 @@ function declarationEntries(ts, sourceFile) {
 function collectIdentifierRefs(ts, node, names, self) {
   const refs = new Set()
   function visit(child) {
-    if (ts.isIdentifier(child) && child.text !== self && names.has(child.text)) {
+    if (ts.isIdentifier(child) && child.text !== self && names.has(child.text) && !isPropertyName(ts, child)) {
       refs.add(child.text)
     }
     ts.forEachChild(child, visit)
@@ -378,6 +379,7 @@ function outlineTypeScript(filePath) {
     sourceKind(ts, filePath),
   )
   const entries = declarationEntries(ts, sourceFile)
+  annotateModuleState(ts, sourceFile, entries)
   const names = new Set(entries.map((entry) => entry.name))
   const meta = fileMeta(ts, sourceFile, filePath)
   return {

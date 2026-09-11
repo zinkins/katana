@@ -135,17 +135,63 @@ class TypeScriptAdapter(BundledLanguageAdapter):
                     pinned_reason=(None if safe else "unmodeled top-level executable statements"),
                 )
                 continue
+            reason = "default export" if meta.get("default_export") else meta.get("move_pinned_reason")
             constraints[symbol.name] = MoveConstraints(
-                movability="pinned" if meta.get("default_export") else "closure",
-                pinned_reason="default export" if meta.get("default_export") else None,
+                movability="pinned" if reason else "closure",
+                required_with=tuple(meta.get("assigned_by", ())),
+                pinned_reason=reason,
             )
         return constraints
 
     def plan_split(self, source: Path, moves: tuple[SourceSplitMove, ...]) -> SourceSplitPlan:
         from katana.apply import plan_text_split
 
-        _validate_test_registration_moves(source, moves, self.outline(source))
-        return plan_text_split(source, moves)
+        symbols = self.outline(source)
+        _validate_test_registration_moves(source, moves, symbols)
+        _validate_module_state_moves(source, moves, symbols)
+        plan = plan_text_split(source, moves)
+        return SourceSplitPlan(
+            plan.source,
+            plan.moves,
+            plan.moved_symbols,
+            (*plan.warnings, *_eager_initializer_warnings(moves, symbols)),
+        )
+
+
+def _validate_module_state_moves(
+    source: Path,
+    moves: tuple[SourceSplitMove, ...],
+    symbols: list[SourceSymbol],
+) -> None:
+    # An ES module import is a read-only binding: whoever reassigns a symbol
+    # must end up in the same file as its declaration.
+    location = {name: move.target.resolve() for move in moves for name in move.symbols}
+    for symbol in symbols:
+        meta = symbol.meta or {}
+        if symbol.name in location and meta.get("reassigned_at_top_level"):
+            raise ValueError(
+                f"Cannot move {symbol.name} from {source}: it is reassigned by top-level "
+                "statements that stay in the source, and an imported binding is read-only"
+            )
+        for writer in meta.get("assigned_by", ()):
+            if location.get(writer) != location.get(symbol.name):
+                raise ValueError(
+                    f"Cannot split {symbol.name} and {writer} into different files: "
+                    f"{writer} reassigns {symbol.name}, and an imported binding is read-only"
+                )
+
+
+def _eager_initializer_warnings(
+    moves: tuple[SourceSplitMove, ...],
+    symbols: list[SourceSymbol],
+) -> list[str]:
+    moved = {name for move in moves for name in move.symbols}
+    return [
+        f"{symbol.name} initializer will run before the top-level statement at line "
+        f"{symbol.meta['eager_after_line']}; verify initialization order"
+        for symbol in symbols
+        if symbol.name in moved and (symbol.meta or {}).get("eager_after_line")
+    ]
 
 
 __all__ = ("TypeScriptAdapter",)
