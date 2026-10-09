@@ -6,25 +6,54 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 const requireFromHere = createRequire(import.meta.url)
 const bridgeDir = path.dirname(fileURLToPath(import.meta.url))
 
-export function resolveOptional(name, sourceFile) {
-  const candidates = [
+function resolutionStarts(sourceFile) {
+  return [
     process.cwd(),
     path.dirname(path.resolve(sourceFile || ".")),
     bridgeDir,
   ]
+}
+
+export function resolveOptional(name, sourceFile) {
   try {
-    return requireFromHere.resolve(name, { paths: candidates })
+    return requireFromHere.resolve(name, { paths: resolutionStarts(sourceFile) })
   } catch {
     return null
   }
 }
 
 export function loadOptional(name, sourceFile) {
+  if (name === "typescript") {
+    const searched = new Set()
+    for (const start of resolutionStarts(sourceFile)) {
+      try {
+        const resolved = requireFromHere.resolve(name, { paths: [start] })
+        if (searched.has(resolved)) continue
+        searched.add(resolved)
+        const ts = requireFromHere(resolved)
+        if (hasCompilerApi(ts)) return ts
+      } catch {
+        // An unusable project package must not hide Katana's optional compiler.
+      }
+    }
+    return null
+  }
   const resolved = resolveOptional(name, sourceFile)
   if (!resolved) {
     return null
   }
   return requireFromHere(resolved)
+}
+
+function hasCompilerApi(ts) {
+  return typeof ts?.createSourceFile === "function" &&
+    typeof ts.forEachChild === "function" &&
+    typeof ts.isIdentifier === "function" &&
+    typeof ts.canHaveModifiers === "function" &&
+    typeof ts.getModifiers === "function" &&
+    typeof ts.ScriptTarget?.Latest === "number" &&
+    typeof ts.ScriptKind?.TS === "number" &&
+    typeof ts.SyntaxKind?.SourceFile === "number"
 }
 
 export async function importOptional(name, sourceFile) {
@@ -38,11 +67,7 @@ export function resolveImportOptional(name, sourceFile) {
   const packageParts = parts.slice(0, scoped ? 2 : 1)
   const subpathParts = parts.slice(scoped ? 2 : 1)
   const exportKey = subpathParts.length ? `./${subpathParts.join("/")}` : "."
-  const starts = [
-    process.cwd(),
-    path.dirname(path.resolve(sourceFile || ".")),
-    bridgeDir,
-  ]
+  const starts = resolutionStarts(sourceFile)
   const searched = new Set()
   for (const start of starts) {
     for (let current = path.resolve(start); ; current = path.dirname(current)) {

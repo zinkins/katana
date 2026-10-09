@@ -410,7 +410,7 @@ function outlineCss(filePath) {
 function capabilities(filePath) {
   return {
     node: Boolean(process.version),
-    typescript: Boolean(resolveOptional("typescript", filePath)),
+    typescript: Boolean(loadOptional("typescript", filePath)),
     postcss: Boolean(resolveOptional("postcss", filePath)),
     tanstack_markdown: Boolean(resolveImportOptional("@tanstack/markdown/parser", filePath)),
   }
