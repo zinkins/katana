@@ -311,8 +311,16 @@ def _symbol_span(symbol: SourceSymbol, offsets: list[int], byte_length: int) -> 
     start_index = max(symbol.start_line - 1, 0)
     end_index = max(symbol.end_line, 0)
     return SourceSpan(
-        start_byte=offsets[start_index] if start_index < len(offsets) else byte_length,
-        end_byte=offsets[end_index] if end_index < len(offsets) else byte_length,
+        start_byte=int(
+            (symbol.meta or {}).get(
+                "start_byte", offsets[start_index] if start_index < len(offsets) else byte_length
+            )
+        ),
+        end_byte=int(
+            (symbol.meta or {}).get(
+                "end_byte", offsets[end_index] if end_index < len(offsets) else byte_length
+            )
+        ),
         start_line=symbol.start_line,
         end_line=symbol.end_line,
     )
@@ -328,6 +336,8 @@ def _symbol_id(
     start_index = max(symbol.start_line - 1, 0)
     if start_byte is not None:
         resolved_start = start_byte
+    elif "start_byte" in (symbol.meta or {}):
+        resolved_start = int((symbol.meta or {})["start_byte"])
     elif start_index < len(offsets):
         resolved_start = offsets[start_index]
     else:

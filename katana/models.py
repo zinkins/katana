@@ -237,6 +237,7 @@ def split_plan_json_schema() -> dict[str, Any]:
                             "type": "array",
                             "items": {"type": "string"},
                             "minItems": 1,
+                            "description": "Legacy symbol names or exact IDs from a fresh katana map.",
                         },
                     },
                 },

@@ -3,7 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { loadOptional, resolveImportOptional, resolveOptional } from "./ast_bridge_modules.mjs"
 import { parseMarkdownDocument } from "./ast_bridge_markdown.mjs"
-import { nodeTestRegistrationEntries } from "./ast_bridge_test_registrations.mjs"
+import { byteSpan, declarationEntries, defaultExported, exported, requireCalls } from "./ast_bridge_declarations.mjs"
 import { annotateModuleState, isPropertyName } from "./ast_bridge_bindings.mjs"
 
 function lineOf(sourceFile, position) {
@@ -92,64 +92,6 @@ function fileMeta(ts, sourceFile, filePath) {
     shadcn_imports: [...new Set(shadcnImports)],
     ui_primitive_imports: [...new Set(uiPrimitiveImports)],
   }
-}
-
-function exported(ts, node) {
-  return Boolean(
-    ts.canHaveModifiers(node) &&
-      ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword),
-  )
-}
-
-function defaultExported(ts, node) {
-  return Boolean(
-    ts.canHaveModifiers(node) &&
-      ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword),
-  )
-}
-
-function declarationEntries(ts, sourceFile) {
-  const entries = []
-  const registrations = new Map(
-    nodeTestRegistrationEntries(ts, sourceFile).map((entry) => [entry.node, entry]),
-  )
-  for (const statement of sourceFile.statements) {
-    if (
-      ts.isFunctionDeclaration(statement) ||
-      ts.isClassDeclaration(statement) ||
-      ts.isInterfaceDeclaration(statement) ||
-      ts.isTypeAliasDeclaration(statement) ||
-      ts.isEnumDeclaration(statement)
-    ) {
-      if (!statement.name && !defaultExported(ts, statement)) {
-        continue
-      }
-      entries.push({
-        node: statement,
-        name: statement.name?.text || "default_export",
-        kind: ts.SyntaxKind[statement.kind],
-      })
-      continue
-    }
-    if (ts.isVariableStatement(statement)) {
-      for (const declaration of statement.declarationList.declarations) {
-        if (ts.isIdentifier(declaration.name)) {
-          entries.push({
-            node: statement,
-            bodyNode: declaration,
-            name: declaration.name.text,
-            kind: ts.SyntaxKind[statement.declarationList.kind],
-          })
-        }
-      }
-      continue
-    }
-    const registration = registrations.get(statement)
-    if (registration) {
-      entries.push(registration)
-    }
-  }
-  return entries
 }
 
 function collectIdentifierRefs(ts, node, names, self) {
@@ -313,6 +255,8 @@ function enrichTsSymbol(ts, sourceFile, fileMetaPayload, entry, names) {
   const bodyNode = entry.bodyNode || node
   const tags = [...(entry.tags || [])]
   const meta = {
+    ...byteSpan(sourceFile, node),
+    require_calls: requireCalls(ts, sourceFile, bodyNode),
     exported: exported(ts, node),
     default_export: defaultExported(ts, node),
     type_only: ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node),

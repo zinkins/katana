@@ -43,6 +43,7 @@ from .models import (
     SourceSplitMove,
     SourceSplitPlan,
 )
+from .move_ids import resolve_move_ids
 from .outline import outline_python_module, outline_source_file
 from .source_io import read_source_text
 from .text_cleanup import _prune_text_imports
@@ -62,7 +63,7 @@ def parse_move_specs(source: Path, specs: list[str]) -> tuple[SourceSplitMove, .
         if not target.is_absolute():
             target = source.parent / target
         moves.append(SourceSplitMove(target=target, symbols=symbols))
-    return tuple(moves)
+    return resolve_move_ids(source, tuple(moves))
 
 
 def parse_move_plan(
@@ -99,7 +100,7 @@ def parse_move_plan(
                     symbols=tuple(str(symbol) for symbol in symbols),
                 )
             )
-    return tuple(moves)
+    return resolve_move_ids(source, tuple(moves))
 
 
 def _default_plan_file(source: Path) -> Path | None:
@@ -148,7 +149,7 @@ def plan_python_split(source: Path, moves: tuple[SourceSplitMove, ...]) -> Sourc
 def plan_source_split(source: Path, moves: tuple[SourceSplitMove, ...]) -> SourceSplitPlan:
     from .adapters import language_adapter_for
 
-    return language_adapter_for(source).plan_split(source, moves)
+    return language_adapter_for(source).plan_split(source, resolve_move_ids(source, moves))
 
 
 def plan_text_split(source: Path, moves: tuple[SourceSplitMove, ...]) -> SourceSplitPlan:
@@ -313,6 +314,7 @@ def apply_source_split(
     from .adapters import language_adapter_for
 
     _validate_targets_stay_in_source_tree(source, moves)
+    moves = resolve_move_ids(source, moves)
     return language_adapter_for(source).apply_split(
         source,
         moves,
@@ -352,6 +354,7 @@ def apply_text_split(
     force: bool = False,
 ) -> SourceSplitPlan:
     plan = plan_source_split(source, moves)
+    moves = plan.moves
     _validate_unique_targets(moves)
     text = read_source_text(source)
     lines = text.splitlines(keepends=True)
@@ -359,10 +362,16 @@ def apply_text_split(
     spans = {symbol.name: (symbol.start_line, symbol.end_line) for symbol in symbols}
     leading_block = _text_leading_block(source, lines)
     typescript = source.suffix in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+    from .adapters.typescript.rewrite import exact_blocks, is_commonjs, rebase_requires
+
+    commonjs = typescript and is_commonjs(source)
     symbols_by_name = {symbol.name: symbol for symbol in symbols}
     moved_to = {symbol: move.target for move in moves for symbol in move.symbols}
     moved_all = set(moved_to)
     kept = _remove_ranges(lines, [spans[name] for name in plan.moved_symbols])
+    exact: dict[str, list[str]] = {}
+    if typescript:
+        kept, exact = exact_blocks(text, symbols, moved_all)
     staying_refs = _text_staying_references(source, kept, moved_all, symbols)
 
     outputs: dict[Path, str] = {}
@@ -386,8 +395,16 @@ def apply_text_split(
             content.append("\n")
         blocks: list[list[str]] = []
         for symbol in move.symbols:
-            block = _slice_with_trailing_blank(lines, spans[symbol])
-            if typescript and "test_registration" not in symbols_by_name[symbol].tags:
+            block = (
+                exact[symbol] if typescript else _slice_with_trailing_blank(lines, spans[symbol])
+            )
+            if commonjs:
+                block = rebase_requires(source, move.target, symbols_by_name[symbol], block)
+            if (
+                typescript
+                and not commonjs
+                and "test_registration" not in symbols_by_name[symbol].tags
+            ):
                 # The source re-imports moved symbols, so they must be
                 # exported from the split file.
                 block = _ts_exported_block(block)
@@ -395,6 +412,10 @@ def apply_text_split(
             content.extend(block)
             if content and content[-1].strip():
                 content.append("\n")
+        if commonjs:
+            export_lines = [f"module.exports.{name} = {name};\n" for name in move.symbols]
+            content.extend(export_lines)
+            blocks.append(export_lines)
         if move.target.exists() and not force:
             outputs[move.target] = merge_text_into_existing_target(
                 source,

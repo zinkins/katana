@@ -172,7 +172,7 @@ def _add_katana_commands(
         action="append",
         default=[],
         metavar="TARGET.ext:SYMBOL[,SYMBOL...]",
-        help="Move top-level symbols into a target file relative to the source file.",
+        help="Move symbol names or fresh map IDs into a target relative to the source file.",
     )
     plan.add_argument("--plan-file", help="JSON move plan with moves[].target and moves[].symbols.")
     plan.add_argument("--json", action="store_true")
@@ -186,7 +186,7 @@ def _add_katana_commands(
         action="append",
         default=[],
         metavar="TARGET.ext:SYMBOL[,SYMBOL...]",
-        help="Move top-level symbols into a target file relative to the source file.",
+        help="Move symbol names or fresh map IDs into a target relative to the source file.",
     )
     apply.add_argument(
         "--plan-file", help="JSON move plan with moves[].target and moves[].symbols."

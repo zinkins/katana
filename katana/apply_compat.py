@@ -36,7 +36,7 @@ def _typescript_leading_block(lines: list[str]) -> list[str]:
             if end == index:
                 end = index + 1
             continue
-        if stripped in {'"use client"', '"use client";', "'use client'", "'use client';"}:
+        if stripped.rstrip(";") in {'"use client"', "'use client'", '"use strict"', "'use strict'"}:
             end = index + 1
             continue
         if stripped.startswith(("import ", "import type ")):
@@ -122,6 +122,10 @@ def _apply_text_compat_exports(
     moves: tuple[SourceSplitMove, ...],
     symbols: list[SourceSymbol],
 ) -> list[str]:
+    from .adapters.typescript.rewrite import commonjs_usage_imports, is_commonjs
+
+    if is_commonjs(source):
+        return commonjs_usage_imports(source, lines, moves, symbols)
     if source.suffix == ".dart":
         return _insert_after_text_leading_block(source, lines, _dart_compat_lines(source, moves))
     if source.suffix == ".css":
@@ -154,6 +158,10 @@ def _apply_text_usage_imports(
     moves: tuple[SourceSplitMove, ...],
     symbols: list[SourceSymbol],
 ) -> list[str]:
+    from .adapters.typescript.rewrite import commonjs_usage_imports, is_commonjs
+
+    if is_commonjs(source):
+        return commonjs_usage_imports(source, lines, moves, symbols)
     if source.suffix not in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".dart"):
         return lines
     moved = {name for move in moves for name in move.symbols}
@@ -338,7 +346,8 @@ def _typescript_target_block(source: Path, target: Path, block: list[str]) -> li
         stripped = line.strip()
         if scanner.in_code and (
             stripped.startswith("import ")
-            or stripped.rstrip(";") in {'"use client"', "'use client'"}
+            or stripped.rstrip(";")
+            in {'"use client"', "'use client'", '"use strict"', "'use strict'"}
         ):
             copying = True
         if copying:

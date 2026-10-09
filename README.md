@@ -144,6 +144,16 @@ groups. The plan is intentionally simple and reviewable:
 }
 ```
 
+`moves[].symbols` and `--move TARGET:SYMBOL[,SYMBOL...]` accept both legacy names
+and exact symbol IDs from a fresh `map`. IDs are validated against the current
+source path, declaration kind and byte offset; plan/apply output uses names.
+
+JavaScript splits preserve CommonJS `require()` and the source's public exports.
+CommonJS rewrites require the TypeScript compiler AST; structural fallback is
+analysis-only for CommonJS. Route registrations are mapped separately and stay
+in the source in execution order. Unresolved source-local dependencies reject
+explicit plans and dry-runs before writing files, including with `--force`.
+
 ### 4. Dry-run, apply, and verify
 
 ```bash

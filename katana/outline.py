@@ -15,6 +15,7 @@ from .outline_text import (
     _attach_typescript_comments,
     _brace_delta,
     _text_code_lines,
+    _typescript_declaration_ends,
     _typescript_doc_start,
     _typescript_file_meta,
     _with_dart_metadata,
@@ -68,7 +69,7 @@ def analyze_source_file(path: Path) -> DocumentIR:
 
 
 def outline_typescript_module(path: Path) -> list[SourceSymbol]:
-    lines = read_source_text(path).splitlines()
+    lines = read_source_text(path).splitlines(keepends=True)
     ast_symbols = outline_typescript_with_ast(path)
     if ast_symbols is not None:
         return _attach_typescript_comments(ast_symbols, lines)
@@ -85,7 +86,9 @@ def outline_typescript_module(path: Path) -> list[SourceSymbol]:
                 starts.append((index, name, kind, stripped))
         scanner.feed(line)
     return _with_typescript_metadata(
-        _symbols_from_text_starts(lines, starts, attach_docs=True),
+        _typescript_declaration_ends(
+            _symbols_from_text_starts(lines, starts, attach_docs=True), lines
+        ),
         lines,
         file_meta=file_meta,
     )

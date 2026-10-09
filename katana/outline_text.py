@@ -8,6 +8,33 @@ from .models import SourceSymbol, SourceSymbolChild
 from .text_scan import BraceScanner
 
 
+def _typescript_declaration_ends(
+    symbols: list[SourceSymbol], lines: list[str]
+) -> list[SourceSymbol]:
+    result: list[SourceSymbol] = []
+    for symbol in symbols:
+        scanner = BraceScanner()
+        end = symbol.end_line
+        for index in range(symbol.start_line - 1, symbol.end_line):
+            previous = scanner.depth
+            scanner.feed(lines[index])
+            if (
+                scanner.in_code
+                and scanner.depth == 0
+                and (previous > 0 or lines[index].rstrip().endswith((";", "}")))
+            ):
+                end = index + 1
+                break
+        result.append(
+            replace(
+                symbol,
+                end_line=end,
+                code_lines=_text_code_lines(lines[symbol.start_line - 1 : end]),
+            )
+        )
+    return result
+
+
 def _with_typescript_metadata(
     symbols: list[SourceSymbol],
     lines: list[str],
@@ -268,6 +295,9 @@ def _attach_typescript_comments(
     previous_end = 0
     for symbol in symbols:
         start = max(_typescript_doc_start(lines, symbol.start_line), previous_end + 1)
-        result.append(replace(symbol, start_line=start))
+        meta = dict(symbol.meta or {})
+        if start < symbol.start_line:
+            meta["start_byte"] = len("".join(lines[: start - 1]).encode("utf-8"))
+        result.append(replace(symbol, start_line=min(start, symbol.start_line), meta=meta))
         previous_end = symbol.end_line
     return result

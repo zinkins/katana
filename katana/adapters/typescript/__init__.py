@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from katana.adapters._builtin import BundledLanguageAdapter
@@ -79,6 +80,8 @@ class TypeScriptAdapter(BundledLanguageAdapter):
         }[path.suffix]
 
     def capabilities(self, path: Path) -> AdapterCapabilities:
+        from .rewrite import is_commonjs
+
         bridge = source_ast_bridge_capabilities(path)
         available = typescript_ast_available(path)
         return AdapterCapabilities(
@@ -95,7 +98,7 @@ class TypeScriptAdapter(BundledLanguageAdapter):
             hierarchy=available,
             comments=available,
             local_bindings=available,
-            module_rewrite=True,
+            module_rewrite=available or not (path.exists() and is_commonjs(path)),
             formatting=True,
             validation=True,
             adapter_available=available,
@@ -114,7 +117,23 @@ class TypeScriptAdapter(BundledLanguageAdapter):
     def outline(self, path: Path) -> list[SourceSymbol]:
         from katana.outline import outline_typescript_module
 
-        return outline_typescript_module(path)
+        from .rewrite import is_commonjs
+
+        symbols = outline_typescript_module(path)
+        if is_commonjs(path):
+            return [
+                replace(
+                    symbol,
+                    meta={
+                        **(symbol.meta or {}),
+                        "move_pinned_reason": "CommonJS rewrite requires the TypeScript compiler AST",
+                    },
+                )
+                if "start_byte" not in (symbol.meta or {})
+                else symbol
+                for symbol in symbols
+            ]
+        return symbols
 
     def constraints(self, path: Path, symbols: list[SourceSymbol]) -> dict[str, MoveConstraints]:
         registrations = _test_registrations(symbols)
@@ -122,6 +141,13 @@ class TypeScriptAdapter(BundledLanguageAdapter):
         constraints: dict[str, MoveConstraints] = {}
         for symbol in symbols:
             meta = symbol.meta or {}
+            if "route_registration" in symbol.tags:
+                constraints[symbol.name] = MoveConstraints(
+                    movability="pinned",
+                    order_policy="preserve",
+                    pinned_reason="route registrations preserve execution order",
+                )
+                continue
             if "test_registration" in symbol.tags:
                 safe = bool(meta.get("registration_rewrite_safe"))
                 constraints[symbol.name] = MoveConstraints(
@@ -149,8 +175,11 @@ class TypeScriptAdapter(BundledLanguageAdapter):
         from katana.apply import plan_text_split
 
         symbols = self.outline(source)
+        from .rewrite import validate_dependencies
+
         _validate_test_registration_moves(source, moves, symbols)
         _validate_module_state_moves(source, moves, symbols)
+        validate_dependencies(source, moves, symbols)
         plan = plan_text_split(source, moves)
         return SourceSplitPlan(
             plan.source,

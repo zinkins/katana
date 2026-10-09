@@ -378,6 +378,8 @@ def _text_dependency_imports(
     symbols: dict[str, SourceSymbol],
     moved_to: dict[str, Path],
 ) -> list[str]:
+    from .adapters.typescript.rewrite import is_commonjs, require_line
+
     refs_by_target: dict[Path, list[str]] = {}
     own_target = target.resolve()
     moved_names = set(move_symbols)
@@ -400,8 +402,11 @@ def _text_dependency_imports(
             module = _relative_uri(target, ref_target)
             lines.append(f"import '{module}' show {', '.join(unique)};\n")
         elif source.suffix in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
-            module = _js_relative_module_name(target, ref_target, style_source=source)
-            lines.extend(_ts_named_lines("import", module, unique, symbols, terminator))
+            if is_commonjs(source):
+                lines.append(require_line(target, ref_target, unique))
+            else:
+                module = _js_relative_module_name(target, ref_target, style_source=source)
+                lines.extend(_ts_named_lines("import", module, unique, symbols, terminator))
     if lines:
         lines.append("\n")
     return lines
